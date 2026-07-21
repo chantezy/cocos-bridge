@@ -140,41 +140,66 @@ cocos-bridge --help
 
 **第 1 步：安装扩展到 Cocos Creator**
 
-有两种安装方式，任选其一：
+有三种安装方式，任选其一：
 
-**全局安装（所有项目可用，推荐）：**
+**方式 A：通过扩展管理器导入（推荐）**
+
+这是最可靠的方式，Cocos Creator 会自动注册并启用扩展：
+
+1. 从 [GitHub Releases](https://github.com/chantezy/cocos-bridge/releases) 下载 `cocos-bridge.zip`，或从源码打包：
+
+```bash
+# 从源码打包
+cd cocos-bridge
+mkdir -p /tmp/cocos-bridge-zip/cocos-bridge
+cp -r src/bin src/lib src/panel src/browser.js src/scene.js src/package.json src/README.md src/LICENSE /tmp/cocos-bridge-zip/cocos-bridge/
+cd /tmp/cocos-bridge-zip && zip -r cocos-bridge.zip cocos-bridge
+```
+
+2. 打开 Cocos Creator，进入你的项目
+3. 顶部菜单点击 **扩展 → 扩展管理器**
+4. 选择 **"全局"** 标签页（所有项目可用）或 **"项目"** 标签页（仅当前项目）
+5. 点击 **"+"** 按钮
+6. 选择 `cocos-bridge.zip` 文件
+7. 导入后在列表中找到 **Cocos Bridge**，点击 **启用** 开关
+
+> 修改扩展代码后，需要在扩展管理器中点击"重新加载"图标，或完全退出重启 Cocos Creator。
+
+**方式 B：复制到项目 extensions 目录**
+
+```bash
+cd /path/to/your-cocos-project
+mkdir -p extensions/cocos-bridge
+
+# 从 npm 全局安装后复制
+cp -r "$(npm root -g)/@chantezy/cocos-bridge"/* extensions/cocos-bridge/
+
+# 或从源码复制
+cp -r /path/to/cocos-bridge/src/* extensions/cocos-bridge/
+```
+
+复制后，在 **扩展 → 扩展管理器 → 项目** 标签页中找到 Cocos Bridge 并启用。
+
+**方式 C：软链接到全局目录**
 
 ```bash
 # macOS / Linux
 mkdir -p ~/.CocosCreator/extensions
-ln -s "$(npm root -g)/@chantezy/cocos-bridge" ~/.CocosCreator/extensions/cocos-bridge
-
-# 或手动指定路径
-ln -s /path/to/cocos-bridge ~/.CocosCreator/extensions/cocos-bridge
+ln -s /path/to/cocos-bridge/src ~/.CocosCreator/extensions/cocos-bridge
 ```
 
-全局安装后，所有 Cocos Creator 项目都能看到 Cocos Bridge 菜单。
+软链接后，同样需要在 **扩展 → 扩展管理器 → 全局** 标签页中启用。
 
-**项目级安装（仅当前项目可用）：**
+> 注意：仅将文件放到 `~/.CocosCreator/extensions/` 目录不够，Cocos Creator 不会自动扫描，必须通过扩展管理器启用。
 
-```bash
-cd /path/to/your-cocos-project
-mkdir -p extensions
-cp -r "$(npm root -g)/@chantezy/cocos-bridge" extensions/cocos-bridge
+**第 2 步：打开扩展面板**
 
-# 或者从源码复制
-cp -r /path/to/cocos-bridge/src extensions/cocos-bridge
-```
+启用扩展后，顶部菜单栏会出现 **Cocos Bridge** 菜单：
 
-**第 2 步：重启 Cocos Creator 并启用扩展**
+1. 点击 **Cocos Bridge → MCP Server** 打开扩展面板
+2. 面板中会显示服务器状态、端口号、已加载工具数量
 
-1. **完全退出** Cocos Creator（不是关闭窗口，是退出程序）
-2. 重新打开 Cocos Creator 和你的项目
-3. 在顶部菜单栏应该能看到 **Cocos Bridge** 菜单
-4. 点击 **Cocos Bridge → MCP Server** 打开扩展面板
-5. 面板中会显示服务器状态、端口号、已加载工具数量
-
-> 如果看不到 Cocos Bridge 菜单，也可以通过 **扩展 → 扩展管理器** 手动添加扩展路径。
+> 如果启用后仍看不到菜单，**完全退出** Cocos Creator（不是关闭窗口，是退出程序）再重新打开。Cocos Creator 会缓存扩展信息，需要重启才能生效。
 
 **第 3 步：启动 MCP Server**
 
