@@ -1,0 +1,506 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function pascalCase(str) {
+  return str
+    .replace(/(^|[_\s-])(\w)/g, function (_, __, ch) { return ch.toUpperCase(); })
+    .replace(/[^a-zA-Z0-9]/g, '');
+}
+
+function camelCase(str) {
+  var pascal = pascalCase(str);
+  return pascal.charAt(0).toLowerCase() + pascal.slice(1);
+}
+
+function ensureDir(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function writeFileSafe(filePath, content) {
+  ensureDir(path.dirname(filePath));
+  fs.writeFileSync(filePath, content, 'utf8');
+}
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+function validateStateMachine(name, states, transitions, initialState) {
+  var warnings = [];
+
+  if (!name || typeof name !== 'string') {
+    warnings.push('State machine name is required.');
+  }
+
+  if (!states || !Array.isArray(states) || states.length === 0) {
+    warnings.push('At least one state must be defined.');
+    return warnings;
+  }
+
+  var stateNames = states.map(function (s) { return s.name; });
+
+  // Check initialState exists
+  if (initialState && stateNames.indexOf(initialState) === -1) {
+    warnings.push("initialState '" + initialState + "' is not defined in states.");
+  }
+
+  // Check for duplicate state names
+  var seen = {};
+  for (var i = 0; i < states.length; i++) {
+    if (!states[i].name) {
+      warnings.push('State at index ' + i + ' is missing a name.');
+      continue;
+    }
+    if (seen[states[i].name]) {
+      warnings.push("Duplicate state name: '" + states[i].name + "'.");
+    }
+    seen[states[i].name] = true;
+  }
+
+  // Check transitions reference valid states
+  if (transitions && Array.isArray(transitions)) {
+    for (var j = 0; j < transitions.length; j++) {
+      var t = transitions[j];
+      if (t.from && stateNames.indexOf(t.from) === -1) {
+        warnings.push("Transition " + j + " references unknown 'from' state: '" + t.from + "'.");
+      }
+      if (t.to && stateNames.indexOf(t.to) === -1) {
+        warnings.push("Transition " + j + " references unknown 'to' state: '" + t.to + "'.");
+      }
+      if (!t.trigger) {
+        warnings.push('Transition ' + j + ' is missing a trigger name.');
+      }
+    }
+  }
+
+  // Check for unreachable states
+  if (transitions && transitions.length > 0 && initialState) {
+    var reachable = {};
+    reachable[initialState] = true;
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (var k = 0; k < transitions.length; k++) {
+        var tr = transitions[k];
+        if (reachable[tr.from] && !reachable[tr.to]) {
+          reachable[tr.to] = true;
+          changed = true;
+        }
+      }
+    }
+    for (var m = 0; m < stateNames.length; m++) {
+      if (!reachable[stateNames[m]]) {
+        warnings.push("State '" + stateNames[m] + "' is unreachable from initialState '" + initialState + "'.");
+      }
+    }
+  }
+
+  // Check for final states with outgoing transitions
+  if (transitions && Array.isArray(transitions)) {
+    for (var n = 0; n < states.length; n++) {
+      if (states[n].isFinal) {
+        var hasOutgoing = transitions.some(function (t) { return t.from === states[n].name; });
+        if (hasOutgoing) {
+          warnings.push("Final state '" + states[n].name + "' has outgoing transitions, which is unusual.");
+        }
+      }
+    }
+  }
+
+  return warnings;
+}
+
+// ---------------------------------------------------------------------------
+// State enum generation
+// ---------------------------------------------------------------------------
+
+function generateStateEnum(name, states) {
+  var enumName = pascalCase(name) + 'State';
+  var lines = [];
+
+  lines.push('export enum ' + enumName + ' {');
+  for (var i = 0; i < states.length; i++) {
+    var stateName = states[i].name;
+    var enumKey = pascalCase(stateName);
+    var comma = i < states.length - 1 ? ',' : ',';
+    lines.push('  ' + enumKey + " = '" + stateName + "'" + comma);
+  }
+  lines.push('}');
+
+  return { enumName: enumName, lines: lines };
+}
+
+// ---------------------------------------------------------------------------
+// Main state machine file generation
+// ---------------------------------------------------------------------------
+
+function generateStateMachineFile(name, states, transitions, initialState, directory) {
+  var className = pascalCase(name);
+  var enumResult = generateStateEnum(name, states);
+  var enumName = enumResult.enumName;
+  var lines = [];
+
+  // Header
+  lines.push('/**');
+  lines.push(' * ' + className + ' — auto-generated state machine.');
+  lines.push(' * Generated by cocos-bridge state-machine-generator.');
+  lines.push(' * Target: Cocos Creator 3.8.x');
+  lines.push(' */');
+  lines.push('');
+  lines.push("import { " + className + "Transitions } from './" + className + "Transitions';");
+  lines.push('');
+
+  // State enum
+  lines = lines.concat(enumResult.lines);
+  lines.push('');
+
+  // State callbacks interface
+  lines.push('export interface ' + className + 'StateCallbacks {');
+  lines.push('  onEnter?: (prevState: ' + enumName + ') => void;');
+  lines.push('  onExit?: (nextState: ' + enumName + ') => void;');
+  lines.push('  onUpdate?: (dt: number) => void;');
+  lines.push('}');
+  lines.push('');
+
+  // Transition rule interface
+  lines.push('interface ' + className + 'TransitionRule {');
+  lines.push('  from: ' + enumName + ';');
+  lines.push('  to: ' + enumName + ';');
+  lines.push('  trigger: string;');
+  lines.push('  condition?: (ctx: any) => boolean;');
+  lines.push('  action?: (ctx: any) => void;');
+  lines.push('  priority: number;');
+  lines.push('}');
+  lines.push('');
+
+  // Main class
+  lines.push('export class ' + className + ' {');
+
+  // Fields
+  lines.push('  private _states: Map<' + enumName + ', ' + className + 'StateCallbacks> = new Map();');
+  lines.push('  private _transitions: ' + className + 'TransitionRule[] = [];');
+  lines.push('  private _currentState: ' + enumName + ' = ' + enumName + '.' + pascalCase(initialState || states[0].name) + ';');
+  lines.push('  private _previousState: ' + enumName + ' = this._currentState;');
+  lines.push('  private _isFinished: boolean = false;');
+  lines.push('  private _transitionsModule: ' + className + 'Transitions;');
+  lines.push('  public context: any = {};');
+  lines.push('');
+
+  // Constructor
+  lines.push('  constructor(context?: any) {');
+  lines.push('    this.context = context || {};');
+  lines.push('    this._transitionsModule = new ' + className + 'Transitions(this.context);');
+  lines.push('    this._registerStates();');
+  lines.push('    this._registerTransitions();');
+  lines.push('  }');
+  lines.push('');
+
+  // Getters
+  lines.push('  public get currentState(): ' + enumName + ' { return this._currentState; }');
+  lines.push('  public get previousState(): ' + enumName + ' { return this._previousState; }');
+  lines.push('  public get isFinished(): boolean { return this._isFinished; }');
+  lines.push('');
+
+  // registerState
+  lines.push('  /** Register a state with optional lifecycle callbacks. */');
+  lines.push('  public registerState(state: ' + enumName + ', callbacks: ' + className + 'StateCallbacks = {}): void {');
+  lines.push('    this._states.set(state, callbacks);');
+  lines.push('  }');
+  lines.push('');
+
+  // start
+  lines.push('  /** Enter the initial state. Call after registering state callbacks. */');
+  lines.push('  public start(): void {');
+  lines.push('    var cb = this._states.get(this._currentState);');
+  lines.push('    if (cb && cb.onEnter) cb.onEnter(this._currentState);');
+  lines.push('  }');
+  lines.push('');
+
+  // transition
+  lines.push('  /** Attempt a transition by trigger name. Returns true if a transition occurred. */');
+  lines.push('  public transition(trigger: string): boolean {');
+  lines.push('    if (this._isFinished) return false;');
+  lines.push('');
+  lines.push('    // Find matching transitions sorted by priority');
+  lines.push('    var candidates = this._transitions.filter(function (t) {');
+  lines.push('      return t.from === this._currentState && t.trigger === trigger;');
+  lines.push('    }.bind(this));');
+  lines.push('');
+  lines.push('    for (var i = 0; i < candidates.length; i++) {');
+  lines.push('      var t = candidates[i];');
+  lines.push('      if (t.condition && !t.condition(this.context)) continue;');
+  lines.push('');
+  lines.push('      // Execute exit callback');
+  lines.push('      var fromCb = this._states.get(this._currentState);');
+  lines.push('      if (fromCb && fromCb.onExit) fromCb.onExit(t.to);');
+  lines.push('');
+  lines.push('      // Execute transition action');
+  lines.push('      if (t.action) t.action(this.context);');
+  lines.push('');
+  lines.push('      // Change state');
+  lines.push('      this._previousState = this._currentState;');
+  lines.push('      this._currentState = t.to;');
+  lines.push('');
+  lines.push('      // Execute enter callback');
+  lines.push('      var toCb = this._states.get(this._currentState);');
+  lines.push('      if (toCb && toCb.onEnter) toCb.onEnter(this._previousState);');
+  lines.push('');
+
+  // Check if new state is final
+  var finalStates = states.filter(function (s) { return s.isFinal; });
+  if (finalStates.length > 0) {
+    lines.push('      // Check if reached a final state');
+    var finalChecks = finalStates.map(function (s) {
+      return 'this._currentState === ' + enumName + '.' + pascalCase(s.name);
+    });
+    lines.push('      if (' + finalChecks.join(' || ') + ') {');
+    lines.push('        this._isFinished = true;');
+    lines.push('      }');
+  }
+
+  lines.push('      return true;');
+  lines.push('    }');
+  lines.push('');
+  lines.push('    return false;');
+  lines.push('  }');
+  lines.push('');
+
+  // forceState
+  lines.push('  /** Force-set the current state without going through transition rules. */');
+  lines.push('  public forceState(state: ' + enumName + '): void {');
+  lines.push('    this._previousState = this._currentState;');
+  lines.push('    this._currentState = state;');
+  lines.push('  }');
+  lines.push('');
+
+  // update
+  lines.push('  /** Forward update tick to the current state. */');
+  lines.push('  public update(dt: number): void {');
+  lines.push('    if (this._isFinished) return;');
+  lines.push('    var cb = this._states.get(this._currentState);');
+  lines.push('    if (cb && cb.onUpdate) cb.onUpdate(dt);');
+  lines.push('  }');
+  lines.push('');
+
+  // reset
+  lines.push('  /** Reset the state machine to the initial state. */');
+  lines.push('  public reset(): void {');
+  lines.push('    this._previousState = this._currentState;');
+  lines.push('    this._currentState = ' + enumName + '.' + pascalCase(initialState || states[0].name) + ';');
+  lines.push('    this._isFinished = false;');
+  lines.push('    var cb = this._states.get(this._currentState);');
+  lines.push('    if (cb && cb.onEnter) cb.onEnter(this._previousState);');
+  lines.push('  }');
+  lines.push('');
+
+  // Private: _registerStates
+  lines.push('  private _registerStates(): void {');
+  for (var si = 0; si < states.length; si++) {
+    lines.push('    this._states.set(' + enumName + '.' + pascalCase(states[si].name) + ', {});');
+  }
+  lines.push('  }');
+  lines.push('');
+
+  // Private: _registerTransitions
+  lines.push('  private _registerTransitions(): void {');
+  if (transitions && Array.isArray(transitions)) {
+    // Sort transitions by priority (higher first)
+    var sorted = transitions.slice().sort(function (a, b) {
+      return (b.priority || 0) - (a.priority || 0);
+    });
+
+    for (var ti = 0; ti < sorted.length; ti++) {
+      var t = sorted[ti];
+      var fromEnum = enumName + '.' + pascalCase(t.from);
+      var toEnum = enumName + '.' + pascalCase(t.to);
+      var trigger = "'" + t.trigger + "'";
+      var priority = t.priority || 0;
+
+      var conditionRef = 'undefined';
+      if (t.condition) {
+        conditionRef = 'this._transitionsModule.' + camelCase(t.condition);
+      }
+
+      var actionRef = 'undefined';
+      if (t.action) {
+        actionRef = 'this._transitionsModule.' + camelCase(t.action);
+      }
+
+      lines.push('    this._transitions.push({');
+      lines.push('      from: ' + fromEnum + ',');
+      lines.push('      to: ' + toEnum + ',');
+      lines.push('      trigger: ' + trigger + ',');
+      lines.push('      condition: ' + conditionRef + ',');
+      lines.push('      action: ' + actionRef + ',');
+      lines.push('      priority: ' + priority + ',');
+      lines.push('    });');
+    }
+  }
+  lines.push('  }');
+
+  lines.push('}');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Transitions file generation
+// ---------------------------------------------------------------------------
+
+function generateTransitionsFile(name, transitions) {
+  var className = pascalCase(name);
+  var lines = [];
+
+  // Header
+  lines.push('/**');
+  lines.push(' * Transition conditions and actions for ' + className + ' state machine.');
+  lines.push(' * Generated by cocos-bridge state-machine-generator.');
+  lines.push(' * Target: Cocos Creator 3.8.x');
+  lines.push(' *');
+  lines.push(' * Edit the condition and action methods below to implement your game logic.');
+  lines.push(' */');
+  lines.push('');
+
+  lines.push('export class ' + className + 'Transitions {');
+  lines.push('  private _context: any;');
+  lines.push('');
+  lines.push('  constructor(context: any) {');
+  lines.push('    this._context = context;');
+  lines.push('  }');
+
+  // Collect unique conditions and actions
+  var conditions = {};
+  var actions = {};
+
+  if (transitions && Array.isArray(transitions)) {
+    for (var i = 0; i < transitions.length; i++) {
+      var t = transitions[i];
+      if (t.condition) conditions[t.condition] = true;
+      if (t.action) actions[t.action] = true;
+    }
+  }
+
+  // Generate condition methods
+  var condNames = Object.keys(conditions);
+  if (condNames.length > 0) {
+    lines.push('');
+    lines.push('  // --- Transition conditions ---');
+    for (var ci = 0; ci < condNames.length; ci++) {
+      var condName = camelCase(condNames[ci]);
+      lines.push('');
+      lines.push('  /** Condition: ' + condNames[ci] + ' */');
+      lines.push('  public ' + condName + '(ctx: any): boolean {');
+      lines.push('    // TODO: implement condition logic');
+      lines.push('    return true;');
+      lines.push('  }');
+    }
+  }
+
+  // Generate action methods
+  var actNames = Object.keys(actions);
+  if (actNames.length > 0) {
+    lines.push('');
+    lines.push('  // --- Transition actions ---');
+    for (var ai = 0; ai < actNames.length; ai++) {
+      var actName = camelCase(actNames[ai]);
+      lines.push('');
+      lines.push('  /** Action: ' + actNames[ai] + ' */');
+      lines.push('  public ' + actName + '(ctx: any): void {');
+      lines.push('    // TODO: implement transition action');
+      lines.push('  }');
+    }
+  }
+
+  lines.push('}');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate state machine code from state/transition definitions.
+ *
+ * @param {object} args
+ * @param {string} args.projectPath - Absolute path to the Cocos project root.
+ * @param {string} args.name - Name of the state machine (used for class and file naming).
+ * @param {Array}  args.states - Array of state definitions.
+ * @param {Array}  args.transitions - Array of transition definitions.
+ * @param {string} args.initialState - Name of the initial state.
+ * @param {string} [args.directory] - Subdirectory under assets/Scripts (default: Core).
+ * @returns {Promise<{success: boolean, files: string[], stateCount: number, transitionCount: number, validationWarnings: string[], error?: string}>}
+ */
+async function generateStateMachine(args) {
+  var projectPath = args ? args.projectPath : undefined;
+  var name = args ? args.name : undefined;
+  var states = args ? args.states : undefined;
+  var transitions = args ? args.transitions : undefined;
+  var initialState = args ? args.initialState : undefined;
+  var directory = args ? args.directory : undefined;
+
+  // --- Validation -----------------------------------------------------------
+  if (!projectPath || typeof projectPath !== 'string') {
+    return { success: false, files: [], stateCount: 0, transitionCount: 0, validationWarnings: ['projectPath is required.'] };
+  }
+  if (!name || typeof name !== 'string') {
+    return { success: false, files: [], stateCount: 0, transitionCount: 0, validationWarnings: ['name is required.'] };
+  }
+
+  var validationWarnings = validateStateMachine(name, states, transitions, initialState);
+  var hasBlockingErrors = validationWarnings.some(function (w) {
+    return w.indexOf('is required') >= 0 || w.indexOf('must be defined') >= 0;
+  });
+
+  if (hasBlockingErrors) {
+    return { success: false, files: [], stateCount: 0, transitionCount: 0, validationWarnings: validationWarnings };
+  }
+
+  try {
+    var className = pascalCase(name);
+    var subDir = directory || 'Core';
+    var outputDir = path.join(projectPath, 'assets/Scripts', subDir);
+    var files = [];
+
+    // Generate main state machine file
+    var mainPath = path.join(outputDir, className + '.ts');
+    var mainContent = generateStateMachineFile(name, states, transitions, initialState, subDir);
+    writeFileSafe(mainPath, mainContent);
+    files.push(path.relative(projectPath, mainPath));
+
+    // Generate transitions file
+    var transPath = path.join(outputDir, className + 'Transitions.ts');
+    var transContent = generateTransitionsFile(name, transitions);
+    writeFileSafe(transPath, transContent);
+    files.push(path.relative(projectPath, transPath));
+
+    return {
+      success: true,
+      files: files,
+      stateCount: states.length,
+      transitionCount: (transitions || []).length,
+      validationWarnings: validationWarnings,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      files: [],
+      stateCount: 0,
+      transitionCount: 0,
+      validationWarnings: [err.message],
+    };
+  }
+}
+
+module.exports = {
+  generateStateMachine,
+};

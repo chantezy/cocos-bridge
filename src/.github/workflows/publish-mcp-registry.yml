@@ -1,0 +1,47 @@
+name: Publish MCP Registry
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_ref:
+        description: Git ref containing the server.json version to publish
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_ref }}
+
+      - name: Verify npm package
+        shell: bash
+        run: |
+          package_name="$(jq -r '.packages[] | select(.registryType == "npm") | .identifier' server.json)"
+          package_version="$(jq -r '.packages[] | select(.registryType == "npm") | .version' server.json)"
+          published_version="$(npm view "${package_name}@${package_version}" version)"
+          test "${published_version}" = "${package_version}"
+
+      - name: Install MCP Publisher
+        shell: bash
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" |
+            tar xz mcp-publisher
+
+      - name: Validate metadata
+        run: ./mcp-publisher validate server.json
+
+      - name: Authenticate with GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish metadata
+        run: ./mcp-publisher publish server.json
