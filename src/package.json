@@ -12,8 +12,7 @@
   "mcpName": "io.github.chantezy/cocos-bridge",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chantezy/game-skills.git",
-    "directory": "cocos mcp/cocos-bridge/src"
+    "url": "git+https://github.com/chantezy/cocos-bridge.git"
   },
   "keywords": [
     "mcp",

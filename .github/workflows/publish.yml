@@ -1,8 +1,8 @@
 name: Publish to npm
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -17,8 +17,27 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org/
 
+      - run: npm install -g npm@latest
+
+      - name: Check if version is new
+        id: version
+        working-directory: src
+        run: |
+          LOCAL=$(node -p "require('./package.json').version")
+          REMOTE=$(npm view @chantezy/cocos-bridge version 2>/dev/null || echo "0.0.0")
+          echo "local=$LOCAL" >> $GITHUB_OUTPUT
+          echo "remote=$REMOTE" >> $GITHUB_OUTPUT
+          if [ "$LOCAL" != "$REMOTE" ]; then
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "New version: $LOCAL (was $REMOTE)"
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+            echo "Version $LOCAL already published, skipping."
+          fi
+
       - run: npm publish --access public
+        if: steps.version.outputs.publish == 'true'
         working-directory: src
