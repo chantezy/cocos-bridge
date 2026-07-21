@@ -2,7 +2,7 @@
 
 Cocos Creator 3.8 扩展 + MCP Server，将游戏策划案（GDD）直接转化为 Cocos Creator 工程文件、场景和代码。
 
-基于 [FunplayAI/funplay-cocos-mcp](https://github.com/FunplayAI/funplay-cocos-mcp) (MIT) 改造，从 105 个操作级工具精简为 17 个意图级工具 + 1 个通用回退工具，聚焦「策划案 → 引擎实现」的桥接场景。
+17 个意图级工具 + 1 个通用回退工具，聚焦「策划案 → 引擎实现」的桥接场景。每个工具封装了多个底层编辑器操作，AI 客户端一次调用即可完成原本需要多步编排的复杂任务。
 
 ## 定位
 

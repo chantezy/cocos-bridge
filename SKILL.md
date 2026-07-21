@@ -10,7 +10,7 @@ version: "0.1.0"
 
 cocos-bridge 是连接 game-design MCP 策划案产出与 Cocos Creator 3.8 引擎实现的桥接层。解决的核心问题:game-design MCP 产出了系统规则、数值配置表、关卡敌人配置、战斗参数等策划案文档,这些文档需要变成 Cocos Creator 项目里可运行的配置文件、TypeScript 代码和场景节点。
 
-**定位:** 不做通用引擎操作工具(已有 DaxianLee/FunplayAI 两个开源方案),只做"策划案意图 → 引擎实现"的翻译层。
+**定位:** 不做通用引擎操作工具,只做"策划案意图 → 引擎实现"的翻译层。
 
 ---
 
@@ -553,7 +553,7 @@ export class CharacterMover extends Component {
 | code | string | 是 | 要执行的代码 |
 | context | enum | 是 | scene(引擎 cc.* 上下文)/ editor(编辑器 Node.js 上下文) |
 
-**安全规则(参考 FunplayAI 的安全检查):**
+**安全规则:**
 
 - 禁止:文件系统删除操作、child_process、原始 writable stream、路径穿越
 - scene 上下文可用:`cc.Node`、`cc.Component`、`cc.Vec3`、`cc.director`、`cc.instantiate` 等
@@ -645,22 +645,6 @@ export class CharacterMover extends Component {
 - MCP 协议版本:`2024-11-05`(与 game-design MCP 对齐)
 - HTTP 传输:Streamable HTTP(通道 B)
 - stdio 传输:标准 stdio(通道 A)
-
----
-
-## 与其他 Cocos MCP 的关系
-
-| 维度 | DaxianLee/cocos-mcp-server | FunplayAI/funplay-cocos-mcp | cocos-bridge(本方案) |
-|------|---------------------------|---------------------------|---------------------|
-| 定位 | 通用编辑器操作工具 | 通用编辑器操作工具 | 策划案到引擎的桥接层 |
-| 工具粒度 | 50(操作码合并) | 105(独立工具) | 17(意图级)+1(兜底) |
-| 策划案理解 | 无 | 无 | 深度集成 game-design MCP |
-| 代码生成 | 无 | 无 | 核心能力 |
-| 配置表生成 | 无 | 无 | 核心能力 |
-| 编辑器扩展 | 是 | 是 | 是(通道 B) |
-| 独立 stdio | 否 | 是(npm bin) | 是(npm bin) |
-
-**互补关系:** cocos-bridge 不替代上述两个项目。如果用户已安装 DaxianLee 或 FunplayAI 的 MCP 做通用编辑器操作,cocos-bridge 可以专注于策划案落地部分,两者共存。
 
 ---
 
