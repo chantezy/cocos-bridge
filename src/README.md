@@ -76,50 +76,34 @@ Cocos Creator 3.8.8 工程
 
 ## 快速开始
 
-### 方式一：stdio 独立使用（无需 Cocos Creator）
+Cocos Bridge 提供两种使用方式，根据你的需求选择：
 
-适合 AI 客户端直接调用生成器，在任意目录下产出 Cocos 项目文件：
+| 方式 | 适合场景 | 可用工具 | 是否需要 Cocos Creator |
+|------|---------|---------|----------------------|
+| **方式一：npm 全局安装** | 只用生成器产出项目/代码/配置 | 通道 A（10 个工具） | 不需要 |
+| **方式二：Cocos Creator 扩展** | 完整双通道，含场景操作 | 全部 18 个工具 | 需要 |
+
+---
+
+### 方式一：npm 全局安装（纯生成器，无需编辑器）
+
+适合只需要生成项目脚手架、配置文件、组件脚本、状态机的场景。AI 客户端通过 stdio 协议直接调用，无需打开 Cocos Creator。
+
+**第 1 步：安装**
 
 ```bash
-# 全局安装
 npm install -g @chantezy/cocos-bridge
-
-# 或在 MCP 客户端配置中添加
 ```
 
-MCP 客户端配置示例：
+安装后终端会多出 `cocos-bridge` 命令。验证安装：
 
-<details>
-<summary>QoderWork / Claude Desktop</summary>
-
-```json
-{
-  "mcpServers": {
-    "cocos_bridge": {
-      "command": "cocos-bridge",
-      "args": ["--url", "http://127.0.0.1:8765/"]
-    }
-  }
-}
+```bash
+cocos-bridge --help
 ```
-</details>
 
-<details>
-<summary>Cursor / VS Code</summary>
+**第 2 步：配置 MCP 客户端**
 
-```json
-{
-  "mcpServers": {
-    "cocos_bridge": {
-      "command": "cocos-bridge",
-      "args": ["--url", "http://127.0.0.1:8765/"]
-    }
-  }
-}
-```
-</details>
-
-如果只需使用通道 A（生成器），可以直接指向本地目录，不需要 `--url`：
+在你的 AI 客户端（Trae、Cursor、Claude Desktop 等）的 MCP 配置文件中添加：
 
 ```json
 {
@@ -131,19 +115,79 @@ MCP 客户端配置示例：
 }
 ```
 
+各客户端配置文件位置：
+
+| 客户端 | 配置文件路径 |
+|--------|------------|
+| **Trae** | 设置 → MCP → 添加 MCP Server，粘贴上面的 JSON |
+| **Cursor** | Settings → MCP → Add new MCP server，粘贴上面的 JSON |
+| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **QoderWork** | 设置 → MCP Servers → 添加，粘贴上面的 JSON |
+
+**第 3 步：验证**
+
+在 AI 客户端中发送以下指令测试：
+
+> 帮我生成一个贪食蛇游戏的 Cocos Creator 项目脚手架
+
+如果 AI 调用了 `generate_project_scaffold` 并输出目录结构，说明配置成功。
+
+---
+
 ### 方式二：Cocos Creator 扩展（完整双通道）
 
-1. 将 `src/` 目录复制到 Cocos 项目的 `extensions/cocos-bridge/`：
+适合需要场景构建、UI 布局、场景检查等编辑器操作的用户。通道 A（生成器）+ 通道 B（场景操作）全部可用。
+
+**第 1 步：安装扩展到 Cocos Creator**
+
+有两种安装方式，任选其一：
+
+**全局安装（所有项目可用，推荐）：**
+
+```bash
+# macOS / Linux
+mkdir -p ~/.CocosCreator/extensions
+ln -s "$(npm root -g)/@chantezy/cocos-bridge" ~/.CocosCreator/extensions/cocos-bridge
+
+# 或手动指定路径
+ln -s /path/to/cocos-bridge ~/.CocosCreator/extensions/cocos-bridge
+```
+
+全局安装后，所有 Cocos Creator 项目都能看到 Cocos Bridge 菜单。
+
+**项目级安装（仅当前项目可用）：**
 
 ```bash
 cd /path/to/your-cocos-project
 mkdir -p extensions
+cp -r "$(npm root -g)/@chantezy/cocos-bridge" extensions/cocos-bridge
+
+# 或者从源码复制
 cp -r /path/to/cocos-bridge/src extensions/cocos-bridge
 ```
 
-2. 重启 Cocos Creator，打开菜单 `Cocos Bridge > MCP Server`
+**第 2 步：重启 Cocos Creator 并启用扩展**
 
-3. 在 MCP 客户端中配置 HTTP 连接：
+1. **完全退出** Cocos Creator（不是关闭窗口，是退出程序）
+2. 重新打开 Cocos Creator 和你的项目
+3. 在顶部菜单栏应该能看到 **Cocos Bridge** 菜单
+4. 点击 **Cocos Bridge → MCP Server** 打开扩展面板
+5. 面板中会显示服务器状态、端口号、已加载工具数量
+
+> 如果看不到 Cocos Bridge 菜单，也可以通过 **扩展 → 扩展管理器** 手动添加扩展路径。
+
+**第 3 步：启动 MCP Server**
+
+扩展面板打开后，MCP Server 通常会自动启动。如果没有，点击面板上的 **Start** 按钮。
+
+启动成功后面板会显示：
+- **URL**: `http://127.0.0.1:8765`（默认端口）
+- **Tools**: 18 个工具已加载
+- **Status**: Running
+
+**第 4 步：配置 MCP 客户端**
+
+在你的 AI 客户端中添加 HTTP 连接，指向 Cocos Creator 中运行的 MCP Server：
 
 ```json
 {
@@ -155,15 +199,67 @@ cp -r /path/to/cocos-bridge/src extensions/cocos-bridge
 }
 ```
 
-### 验证连接
+> 注意：这里是 `"url"` 而不是 `"command"`，因为通道 B 通过 HTTP 协议连接。
+
+各客户端配置方式同方式一，只是 JSON 内容不同。
+
+**第 5 步：验证**
+
+先在终端验证 MCP Server 是否在运行：
 
 ```bash
-# HTTP 健康检查
 curl http://127.0.0.1:8765/health
-
-# 查看可用工具
-curl http://127.0.0.1:8765/tools
+# 应返回 {"status":"ok",...}
 ```
+
+然后在 AI 客户端中测试：
+
+> 检查当前项目的场景图
+
+如果 AI 调用了 `inspect_scene_graph` 并返回节点信息，说明完整双通道配置成功。
+
+---
+
+### 方式三：从源码安装（开发者）
+
+适合想要修改代码或贡献开发的用户：
+
+```bash
+git clone https://github.com/chantezy/cocos-bridge.git
+cd cocos-bridge/src
+npm install
+npm run check   # 语法检查
+```
+
+然后按方式一或方式二配置使用。开发时推荐用 `npm link` 做本地链接：
+
+```bash
+cd cocos-bridge/src
+npm link
+
+# 然后配置 MCP 客户端指向 cocos-bridge 命令即可
+```
+
+---
+
+### 两种通道同时使用
+
+如果你想让 AI 客户端同时拥有 stdio 生成器和 HTTP 场景操作的能力，可以同时配置两个通道。在 MCP 客户端配置中添加两个 server：
+
+```json
+{
+  "mcpServers": {
+    "cocos_bridge_stdio": {
+      "command": "cocos-bridge"
+    },
+    "cocos_bridge_http": {
+      "url": "http://127.0.0.1:8765/"
+    }
+  }
+}
+```
+
+> 大多数 AI 客户端会自动合并两个 server 的工具列表。通道 A 提供生成器，通道 B 提供场景操作，互不冲突。
 
 ## 与 game-design MCP 集成
 

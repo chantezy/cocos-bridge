@@ -1,5 +1,5 @@
 {
-  "name": "@chantezy/cocos-bridge",
+  "name": "cocos-bridge",
   "package_version": 2,
   "version": "0.1.1",
   "description": "Cocos Bridge MCP — bridges game design documents to Cocos Creator 3.8 engine implementation. 17 intent-level tools + 1 fallback, dual-channel (stdio + HTTP).",

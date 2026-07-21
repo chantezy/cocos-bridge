@@ -38,6 +38,18 @@ jobs:
             echo "Version $LOCAL already published, skipping."
           fi
 
+      - name: Rewrite package name for npm publish
+        if: steps.version.outputs.publish == 'true'
+        working-directory: src
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.name = '@chantezy/cocos-bridge';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('Rewrote name to @chantezy/cocos-bridge');
+          "
+
       - run: npm publish --access public
         if: steps.version.outputs.publish == 'true'
         working-directory: src
